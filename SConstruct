@@ -62,6 +62,7 @@ DEFAULT_LINK_PRIORITY = ['internal','other','frameworks','user','system']
 
 
 pretty_dep_names = {
+    'odbc':'ODBC library | configure with SQLSERVER_LIBS & SQLSERVER_INCLUDES | more info: https://github.com/mapnik/mapnik/wiki/SQLServer',
     'ociei':'Oracle database library | configure with OCCI_LIBS & OCCI_INCLUDES | more info: https://github.com/mapnik/mapnik/wiki/OCCI',
     'gdal':'GDAL C++ library | configured using gdal-config program | try setting GDAL_CONFIG SCons option | more info: https://github.com/mapnik/mapnik/wiki/GDAL',
     'ogr':'OGR-enabled GDAL C++ Library | configured using gdal-config program | try setting GDAL_CONFIG SCons option | more info: https://github.com/mapnik/mapnik/wiki/OGR',
@@ -100,6 +101,7 @@ PLUGINS = { # plugins with external dependencies
             'occi':    {'default':False,'path':'OCCI','inc':'occi.h','lib':'ociei','lang':'C++'},
             'sqlite':  {'default':True,'path':'SQLITE','inc':'sqlite3.h','lib':'sqlite3','lang':'C'},
             'rasterlite':  {'default':False,'path':'RASTERLITE','inc':['sqlite3.h','rasterlite.h'],'lib':'rasterlite','lang':'C'},
+            'sqlserver':   {'default':False,'path':'SQLSERVER','inc':['sql.h','msodbcsql.h'],'lib':'odbc','lang':'C++'},
 
             # todo: osm plugin does also depend on libxml2 (but there is a separate check for that)
             'osm':     {'default':False,'path':None,'inc':'curl/curl.h','lib':'curl','lang':'C'},
@@ -352,6 +354,8 @@ opts.AddVariables(
     PathVariable('SQLITE_LIBS', 'Search path for SQLITE library files', '/usr/' + LIBDIR_SCHEMA_DEFAULT, PathVariable.PathAccept),
     PathVariable('RASTERLITE_INCLUDES', 'Search path for RASTERLITE include files', '/usr/include/', PathVariable.PathAccept),
     PathVariable('RASTERLITE_LIBS', 'Search path for RASTERLITE library files', '/usr/' + LIBDIR_SCHEMA_DEFAULT, PathVariable.PathAccept),
+    PathVariable('SQLSERVER_INCLUDES', 'Search path for SQLSERVER include files', '/opt/microsoft/msodbcsql/11.0.2270.0/include/', PathVariable.Pat
+    PathVariable('SQLSERVER_LIBS', 'Search path for SQLSERVER library files', '/usr/' + LIBDIR_SCHEMA_DEFAULT, PathVariable.PathAccept),
 
     # Variables for logging and statistics
     BoolVariable('ENABLE_LOG', 'Enable logging, which is enabled by default when building in *debug*', 'False'),
