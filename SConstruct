@@ -354,7 +354,7 @@ opts.AddVariables(
     PathVariable('SQLITE_LIBS', 'Search path for SQLITE library files', '/usr/' + LIBDIR_SCHEMA_DEFAULT, PathVariable.PathAccept),
     PathVariable('RASTERLITE_INCLUDES', 'Search path for RASTERLITE include files', '/usr/include/', PathVariable.PathAccept),
     PathVariable('RASTERLITE_LIBS', 'Search path for RASTERLITE library files', '/usr/' + LIBDIR_SCHEMA_DEFAULT, PathVariable.PathAccept),
-    PathVariable('SQLSERVER_INCLUDES', 'Search path for SQLSERVER include files', '/opt/microsoft/msodbcsql/11.0.2270.0/include/', PathVariable.Pat
+    PathVariable('SQLSERVER_INCLUDES', 'Search path for SQLSERVER include files', '/opt/microsoft/msodbcsql/11.0.2270.0/include/', PathVariable.PathAccept),
     PathVariable('SQLSERVER_LIBS', 'Search path for SQLSERVER library files', '/usr/' + LIBDIR_SCHEMA_DEFAULT, PathVariable.PathAccept),
 
     # Variables for logging and statistics
