@@ -66,7 +66,7 @@ private:
     SQLHENV henv_;
     SQLHDBC hdbc_;
     
-    std::string sql_bbox(mapnik::box2d<double> const& env) const;
+    mapnik::featureset_ptr features_in_box(mapnik::box2d<double> const& box) const;
 };
 
 class sqlserver_datasource_exception : public mapnik::datasource_exception

@@ -23,6 +23,7 @@
 
 // sql server (odbc)
 #include <sqlext.h>
+#include <msodbcsql.h>
 
 using mapnik::query;
 using mapnik::box2d;
@@ -85,23 +86,7 @@ feature_ptr sqlserver_featureset::next()
     // create an empty feature with the next id
     feature_ptr feature(feature_factory::create(ctx_, feature_id_));
 
-    // get the geometry from column 1
-    SQLUSMALLINT ColumnNum = 1;
-    SQLCHAR BinaryPtr[2048];    // TODO: handle larger
-    SQLLEN BinaryLenOrInd;
-    retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_BINARY, BinaryPtr, sizeof(BinaryPtr), &BinaryLenOrInd);
-    if (!SQL_SUCCEEDED(retcode)) {
-        throw sqlserver_datasource_exception("could not get data size", SQL_HANDLE_STMT, hstmt_);
-    }
     
-    sqlserver_geometry_parser geometry_parser(column_type_);
-    mapnik::geometry_container *geom = geometry_parser.parse(BinaryPtr, BinaryLenOrInd);
-    for (size_t j=0; j<geom->size(); j++) {
-        feature->add_geometry(&geom->at(j));
-    }
-    
-    // get the rest of the row data
-
     // find out how many columns in result set
     SQLSMALLINT n=0;
     retcode = SQLNumResultCols(hstmt_, &n);
@@ -109,8 +94,8 @@ feature_ptr sqlserver_featureset::next()
         throw sqlserver_datasource_exception("could not get number of result columns", SQL_HANDLE_STMT, hstmt_);
     }
     
-    // get name,type for each column past the geometry at column 1
-    for (int ColumnNum=2; ColumnNum<=n; ColumnNum++) {
+    // get name,type for each column
+    for (int ColumnNum=1; ColumnNum<=n; ColumnNum++) {
         SQLCHAR      ColumnName[255]; // max is currently 128 in sql server
         SQLSMALLINT  NameLength;
         SQLSMALLINT  DataType;
@@ -125,6 +110,8 @@ feature_ptr sqlserver_featureset::next()
         SQLCHAR sval[2048];
         long ival;
         double dval;
+        SQLCHAR BinaryPtr[2048];    // TODO: handle larger
+        SQLLEN BinaryLenOrInd;
         SQLLEN LenOrInd;
         switch (DataType) {
             case SQL_CHAR:
@@ -161,7 +148,22 @@ feature_ptr sqlserver_featureset::next()
                 }
                 feature->put((char*)ColumnName, dval);
                 break;
-                
+    
+            case SQL_SS_UDT: {
+                // make sure this udt is a spatial data type
+                retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_BINARY, BinaryPtr, sizeof(BinaryPtr), &BinaryLenOrInd);
+                if (!SQL_SUCCEEDED(retcode)) {
+                    throw sqlserver_datasource_exception("could not get data size", SQL_HANDLE_STMT, hstmt_);
+                }
+    
+                sqlserver_geometry_parser geometry_parser(column_type_);
+                mapnik::geometry_container *geom = geometry_parser.parse(BinaryPtr, BinaryLenOrInd);
+                for (size_t j=0; j<geom->size(); j++) {
+                    feature->add_geometry(&geom->at(j));
+                }
+                break;
+            }
+
             default:
                 MAPNIK_LOG_WARN(sqlserver) << "sqlserver_datasource: unknown/unsupported datatype in column: " << ColumnName << " (" << DataType << ")";
                 break;

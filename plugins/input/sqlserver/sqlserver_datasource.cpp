@@ -390,67 +390,13 @@ layer_descriptor sqlserver_datasource::get_descriptor() const
     return desc_;
 }
 
-std::string sqlserver_datasource::sql_bbox(box2d<double> const& env) const
-{
-    std::ostringstream b;
-    b << std::setprecision(16);
-    b << "geometry::STPolyFromText('POLYGON((";
-    b << env.minx() << " " << env.miny() << ", ";
-    b << env.minx() << " " << env.maxy() << ", ";
-    b << env.maxx() << " " << env.maxy() << ", ";
-    b << env.maxx() << " " << env.miny() << ", ";
-    b << env.minx() << " " << env.miny() << "))'," << srid_ <<")";
-    return b.str();
-}
-
 featureset_ptr sqlserver_datasource::features(query const& q) const
 {
 #ifdef MAPNIK_STATS
     mapnik::progress_timer __stats__(std::clog, "sqlserver_datasource::features");
 #endif
     box2d<double> const& box = q.get_bbox();
-    
-    std::ostringstream s;
-    s << "SELECT ";
-    s << geometry_field_;
-
-    std::set<std::string> const& props = q.property_names();
-    std::set<std::string>::const_iterator pos = props.begin();
-    std::set<std::string>::const_iterator end = props.end();
-    mapnik::context_ptr ctx = boost::make_shared<mapnik::context_type>();
-    for (; pos != end; ++pos) {
-        s << ", " << *pos;
-        ctx->push(*pos);
-    }
-    
-    std::string clause = table_; //populate_tokens(table_, scale_denom, box, px_gw, px_gh);
-    
-    std::ostringstream spatial_sql;
-    spatial_sql << " WHERE ";
-    spatial_sql << geometry_field_ << ".STIntersects(" << sql_bbox(box) << ") = 1";
-    
-    if (boost::algorithm::ifind_first(clause, "WHERE"))
-    {
-        boost::algorithm::ireplace_first(clause, "WHERE", spatial_sql.str() + " AND ");
-    }
-    else if (boost::algorithm::ifind_first(clause, table_))
-    {
-        boost::algorithm::ireplace_first(clause, table_, table_ + " " + spatial_sql.str());
-    }
-    else
-    {
-        MAPNIK_LOG_WARN(sqlserver) << "sqlserver_datasource: cannot determine where to add the spatial filter clause";
-    }
-    
-    s << " FROM " << clause;
-
-    MAPNIK_LOG_DEBUG(sqlserver) << "sqlserver_datasource: " << s.str();
-
-    return boost::make_shared<sqlserver_featureset>(hdbc_,
-                                                ctx,
-                                                s.str(),
-                                                desc_.get_encoding(),
-                                                geometry_type_);
+    return features_in_box(box);
 }
 
 featureset_ptr sqlserver_datasource::features_at_point(coord2d const& pt, double tol) const
@@ -459,48 +405,55 @@ featureset_ptr sqlserver_datasource::features_at_point(coord2d const& pt, double
     mapnik::progress_timer __stats__(std::clog, "sqlserver_datasource::features_at_point");
 #endif
     box2d<double> box(pt.x - tol, pt.y - tol, pt.x + tol, pt.y + tol);
-    
-    std::ostringstream s;
-    s << "SELECT ";
-    s << geometry_field_;
-    
+    return features_in_box(box);
+}
+
+featureset_ptr sqlserver_datasource::features_in_box(box2d<double> const& box) const {
     std::vector<attribute_descriptor>::const_iterator itr = desc_.get_descriptors().begin();
     std::vector<attribute_descriptor>::const_iterator end = desc_.get_descriptors().end();
     mapnik::context_ptr ctx = boost::make_shared<mapnik::context_type>();
-    while (itr != end)
-    {
-        s << ", " << itr->get_name();
+    while (itr != end) {
         ctx->push(itr->get_name());
         ++itr;
     }
-    
-    std::string clause = table_; //populate_tokens(table_, scale_denom, box, px_gw, px_gh);
-    
+
+    std::string sql; // = table_; //populate_tokens(table_, scale_denom, box, px_gw, px_gh);
+    if (table_.find_first_of(" \t") == std::string::npos) {
+        // no whitespace in table_; assume a table/view name
+        sql = "SELECT * from " + table_;
+    } else {
+        // whitespace in table_; assume a subquery
+        sql = table_ ;
+    }
+
     std::ostringstream spatial_sql;
-    spatial_sql << " WHERE ";
-    spatial_sql << geometry_field_ << ".STIntersects(" << sql_bbox(box) << ") = 1";
-    
-    if (boost::algorithm::ifind_first(clause, "WHERE"))
-    {
-        boost::algorithm::ireplace_first(clause, "WHERE", spatial_sql.str() + " AND ");
-    }
-    else if (boost::algorithm::ifind_first(clause, table_))
-    {
-        boost::algorithm::ireplace_first(clause, table_, table_ + " " + spatial_sql.str());
-    }
-    else
-    {
+    spatial_sql << " WHERE " << geometry_field_;
+    spatial_sql << ".STIntersects(" ;
+    spatial_sql << std::setprecision(16);
+    spatial_sql << "geometry::STPolyFromText('POLYGON((";
+    spatial_sql << box.minx() << " " << box.miny() << ", ";
+    spatial_sql << box.minx() << " " << box.maxy() << ", ";
+    spatial_sql << box.maxx() << " " << box.maxy() << ", ";
+    spatial_sql << box.maxx() << " " << box.miny() << ", ";
+    spatial_sql << box.minx() << " " << box.miny() << "))'," << srid_ <<")";
+    spatial_sql << ") = 1"; 
+
+    if (boost::algorithm::ifind_first(sql, "WHERE")) {
+        // change existing where clause; prefix it with the spatial predicate
+        boost::algorithm::ireplace_first(sql, "WHERE", spatial_sql.str() + " AND ");
+    } else if (boost::algorithm::ifind_first(sql, table_)) {
+        // no where clause, so add the spatial predicate as the where clause
+        boost::algorithm::ireplace_first(sql, table_, table_ + " " + spatial_sql.str());
+    } else {
         MAPNIK_LOG_WARN(sqlserver) << "sqlserver_datasource: cannot determine where to add the spatial filter clause";
     }
     
-    s << " FROM " << clause;
-    
-    MAPNIK_LOG_DEBUG(sqlserver) << "sqlserver_datasource: " << s.str();
-    
+    MAPNIK_LOG_DEBUG(sqlserver) << "sqlserver_datasource: " << sql;
+
     return boost::make_shared<sqlserver_featureset>(hdbc_,
-                                                    ctx,
-                                                    s.str(),
-                                                    desc_.get_encoding(),
-                                                    geometry_type_);
+                                                ctx,
+                                                sql,
+                                                desc_.get_encoding(),
+                                                geometry_type_);
 }
 
