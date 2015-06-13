@@ -80,7 +80,7 @@ sqlserver_datasource::sqlserver_datasource(parameters const& params) :
     type_(datasource::Vector),
     fields_(*params.get<std::string>("fields", "*")),
     geometry_field_(*params.get<std::string>("geometry_field", "")),
-    geometry_type_(Geometry),
+    is_geometry_(true),
     extent_initialized_(false),
     desc_(*params.get<std::string>("type"), *params.get<std::string>("encoding", "utf-8")),
     henv_(0),
@@ -95,6 +95,21 @@ sqlserver_datasource::sqlserver_datasource(parameters const& params) :
         table_ = *params.get<std::string>("table");
     } else {
         throw sqlserver_datasource_exception("no <table> parameter specified");
+    }
+    
+    // they may supply an extent (and srid) to prevent querying for it
+    boost::optional<std::string> ext = params.get<std::string>("extent");
+    if (ext) {
+        extent_initialized_ = extent_.from_string(*ext);
+    }
+    
+    boost::optional<int> srid = params.get<int>("srid");
+    if (srid) {
+        srid_ = *srid;
+    }
+
+    if (ext && !srid) {
+        throw sqlserver_datasource_exception("must specify <srid> parameter if <extent> parameter specified");
     }
     
     // the driver refers to an entry in odbcinst.ini http://www.unixodbc.org/odbcinst.html
@@ -174,15 +189,13 @@ sqlserver_datasource::sqlserver_datasource(parameters const& params) :
 #endif
 
     // table parameter can be a table/view name or a subquery
-    // iff a subquery, need to wrap in ()
     std::ostringstream stmt;
-    stmt << "SELECT TOP(1) " << fields_ << " FROM ";
     if (table_.find_first_of(" \t") == std::string::npos) {
-        // no whitespace in table; assume a table/view name
-        stmt << table_;
+        // no whitespace in table_; assume a table/view name
+        stmt << "SELECT TOP(1) " << fields_ << " FROM " << table_;
     } else {
-        // whitespace in table; assume a subquery
-        stmt << "(" << table_ << ") T";
+        // whitespace in table_; assume a valid query
+        stmt << table_;
     }
     MAPNIK_LOG_DEBUG(sqlserver) << "sqlserver_datasource: " << stmt.str();
     
@@ -227,13 +240,13 @@ sqlserver_datasource::sqlserver_datasource(parameters const& params) :
         case SQL_CHAR:
         case SQL_VARCHAR:
         case -9: // NVARCHAR
-            desc_.add_descriptor(attribute_descriptor((char *)ColumnName,mapnik::String));
+                desc_.add_descriptor(attribute_descriptor((char *)ColumnName,mapnik::sqlserver::String));
             //MAPNIK_LOG_DEBUG(sqlserver) << "found string column: " << (char*)ColumnName;
             break;
                 
         case SQL_INTEGER:
         case SQL_SMALLINT:
-            desc_.add_descriptor(attribute_descriptor((char *)ColumnName,mapnik::Integer));
+            desc_.add_descriptor(attribute_descriptor((char *)ColumnName,mapnik::sqlserver::Integer));
             //MAPNIK_LOG_DEBUG(sqlserver) << "found integer column: " << (char*)ColumnName;
             break;
                 
@@ -242,7 +255,7 @@ sqlserver_datasource::sqlserver_datasource(parameters const& params) :
         case SQL_FLOAT:
         case SQL_REAL:
         case SQL_DOUBLE:
-            desc_.add_descriptor(attribute_descriptor((char *)ColumnName,mapnik::Double));
+            desc_.add_descriptor(attribute_descriptor((char *)ColumnName,mapnik::sqlserver::Double));
             //MAPNIK_LOG_DEBUG(sqlserver) << "found double column: " << (char*)ColumnName;
             break;
                 
@@ -250,7 +263,7 @@ sqlserver_datasource::sqlserver_datasource(parameters const& params) :
         case SQL_TYPE_DATE:
         case SQL_TYPE_TIME:
         case SQL_TYPE_TIMESTAMP:
-            desc_.add_descriptor(attribute_descriptor((char *)ColumnName,mapnik::String));
+            desc_.add_descriptor(attribute_descriptor((char *)ColumnName,mapnik::sqlserver::String));
             //MAPNIK_LOG_DEBUG(sqlserver) << "found string column: " << (char*)ColumnName;
             break;
                 
@@ -264,17 +277,20 @@ sqlserver_datasource::sqlserver_datasource(parameters const& params) :
             if (strcmp((char *)TypeName, "geometry") == 0 || std::memcmp((char*)TypeName, geometry, ReturnedLength) == 0) {
                 //MAPNIK_LOG_DEBUG(sqlserver) << "found geometry column: " << (char*)ColumnName;
                 geometry_field_ = (const char *)ColumnName;
-                geometry_type_ = Geometry;
+                is_geometry_ = true;
+                desc_.add_descriptor(attribute_descriptor((char *)ColumnName,mapnik::sqlserver::Geometry));
             }
             if (strcmp((char *)TypeName, "geography") == 0 || std::memcmp((char*)TypeName, geography, ReturnedLength) == 0) {
                 //MAPNIK_LOG_DEBUG(sqlserver) << "found geography column: " << (char*)ColumnName;
                 geometry_field_ = (const char *)ColumnName;
-                geometry_type_ = Geography;
+                is_geometry_ = false;
+                desc_.add_descriptor(attribute_descriptor((char *)ColumnName,mapnik::sqlserver::Geography));
             }
             break;
 
         default:
             MAPNIK_LOG_WARN(sqlserver) << "sqlserver_datasource: unknown/unsupported datatype in column: " << ColumnName << " (" << DataType << ")";
+            desc_.add_descriptor(attribute_descriptor((char *)ColumnName,mapnik::sqlserver::Unknown));
             break;
         }
     }
@@ -363,7 +379,7 @@ box2d<double> sqlserver_datasource::envelope() const
     }
     //MAPNIK_LOG_DEBUG(sqlserver) << "sqlserver_datasource: envelope returned " << BinaryLenOrInd << " bytes";
     
-    sqlserver_geometry_parser geometry_parser(geometry_type_);
+    sqlserver_geometry_parser geometry_parser(is_geometry_ ? Geometry : Geography);
     mapnik::geometry_container *geom = geometry_parser.parse(BinaryPtr, BinaryLenOrInd);
     if (geom->size() > 0) {
         extent_ = geom->at(0).envelope();
@@ -409,14 +425,6 @@ featureset_ptr sqlserver_datasource::features_at_point(coord2d const& pt, double
 }
 
 featureset_ptr sqlserver_datasource::features_in_box(box2d<double> const& box) const {
-    std::vector<attribute_descriptor>::const_iterator itr = desc_.get_descriptors().begin();
-    std::vector<attribute_descriptor>::const_iterator end = desc_.get_descriptors().end();
-    mapnik::context_ptr ctx = boost::make_shared<mapnik::context_type>();
-    while (itr != end) {
-        ctx->push(itr->get_name());
-        ++itr;
-    }
-
     std::string sql; // = table_; //populate_tokens(table_, scale_denom, box, px_gw, px_gh);
     if (table_.find_first_of(" \t") == std::string::npos) {
         // no whitespace in table_; assume a table/view name
@@ -451,9 +459,7 @@ featureset_ptr sqlserver_datasource::features_in_box(box2d<double> const& box) c
     MAPNIK_LOG_DEBUG(sqlserver) << "sqlserver_datasource: " << sql;
 
     return boost::make_shared<sqlserver_featureset>(hdbc_,
-                                                ctx,
                                                 sql,
-                                                desc_.get_encoding(),
-                                                geometry_type_);
+                                                desc_);
 }
 

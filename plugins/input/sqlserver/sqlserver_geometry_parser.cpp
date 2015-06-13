@@ -38,6 +38,7 @@
  ****************************************************************************/
 
 #include "sqlserver_geometry_parser.hpp"
+#include "sqlserver_datasource.hpp"
 
 #include <mapnik/datasource.hpp>
 

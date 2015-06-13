@@ -14,6 +14,7 @@
 #include <mapnik/datasource.hpp>
 #include <mapnik/geometry.hpp>
 #include <mapnik/unicode.hpp>
+#include <mapnik/attribute_descriptor.hpp>
 
 // boost
 #include <boost/scoped_ptr.hpp>
@@ -22,24 +23,22 @@
 // sql server (via odbc)
 #include "sql.h"
 
-// spatial data types
-#include "sqlserver_datasource.hpp"
+#include <utility>
+#include <vector>
 
 class sqlserver_featureset : public mapnik::Featureset
 {
 public:
     sqlserver_featureset(SQLHDBC hdbc,
-                         mapnik::context_ptr const& ctx,
                          std::string const& sqlstring,
-                         std::string const& encoding,
-                         spatial_data_type columntype);
+                         mapnik::layer_descriptor const& desc);
     virtual ~sqlserver_featureset();
     mapnik::feature_ptr next();
 
 private:
     SQLHANDLE hstmt_;
+    mapnik::layer_descriptor desc_;
     boost::scoped_ptr<mapnik::transcoder> tr_;
-    spatial_data_type column_type_;
     mapnik::value_integer feature_id_;
     mapnik::context_ptr ctx_;
 };

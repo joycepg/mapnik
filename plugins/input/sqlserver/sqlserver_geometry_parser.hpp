@@ -1,8 +1,10 @@
 // mapnik
 #include <mapnik/geometry.hpp>
 
-// spatial data types
-#include "sqlserver_datasource.hpp"
+enum spatial_data_type {
+    Geometry,
+    Geography
+};
 
 class sqlserver_geometry_parser
 {

@@ -32,18 +32,16 @@ using mapnik::geometry_type;
 using mapnik::geometry_utils;
 using mapnik::transcoder;
 using mapnik::feature_factory;
+using mapnik::attribute_descriptor;
 
 sqlserver_featureset::sqlserver_featureset(SQLHDBC hdbc,
-                                 mapnik::context_ptr const& ctx,
                                  std::string const& sqlstring,
-                                 std::string const& encoding,
-                                 spatial_data_type columntype
+                                 mapnik::layer_descriptor const& desc
                                  )
     : hstmt_(0),
-      tr_(new transcoder(encoding)),
-      column_type_(columntype),
-      feature_id_(1),
-      ctx_(ctx)
+      desc_(desc),
+      tr_(new transcoder(desc.get_encoding())),
+      feature_id_(1)
 {
     SQLRETURN retcode;
     
@@ -57,6 +55,14 @@ sqlserver_featureset::sqlserver_featureset(SQLHDBC hdbc,
     retcode = SQLExecDirect(hstmt_, (SQLCHAR*)sqlstring.c_str(), SQL_NTS);
     if (!SQL_SUCCEEDED(retcode)) {
         throw sqlserver_datasource_exception("could not execute statement", SQL_HANDLE_STMT, hstmt_);
+    }
+    
+    std::vector<attribute_descriptor>::const_iterator itr = desc_.get_descriptors().begin();
+    std::vector<attribute_descriptor>::const_iterator end = desc_.get_descriptors().end();
+    ctx_ = boost::make_shared<mapnik::context_type>();
+    while (itr != end) {
+        ctx_->push(itr->get_name());
+        ++itr;
     }
     
 
@@ -82,81 +88,54 @@ feature_ptr sqlserver_featureset::next()
     if (!SQL_SUCCEEDED(retcode)) {
         throw sqlserver_datasource_exception("could not fetch result", SQL_HANDLE_STMT, hstmt_);
     }
-    
+   
     // create an empty feature with the next id
     feature_ptr feature(feature_factory::create(ctx_, feature_id_));
 
-    
-    // find out how many columns in result set
-    SQLSMALLINT n=0;
-    retcode = SQLNumResultCols(hstmt_, &n);
-    if (!SQL_SUCCEEDED(retcode)) {
-        throw sqlserver_datasource_exception("could not get number of result columns", SQL_HANDLE_STMT, hstmt_);
-    }
-    
-    // get name,type for each column
-    for (int ColumnNum=1; ColumnNum<=n; ColumnNum++) {
-        SQLCHAR      ColumnName[255]; // max is currently 128 in sql server
-        SQLSMALLINT  NameLength;
-        SQLSMALLINT  DataType;
-        SQLULEN      ColumnSize;
-        SQLSMALLINT  DecimalDigits;
-        SQLSMALLINT  Nullable;
-        retcode = SQLDescribeCol(hstmt_, ColumnNum, ColumnName, sizeof(ColumnName), &NameLength, &DataType, &ColumnSize, &DecimalDigits, &Nullable);
-        if (!SQL_SUCCEEDED(retcode)) {
-            throw sqlserver_datasource_exception("could not describe column", SQL_HANDLE_STMT, hstmt_);
-        }
-        
+    // populate feature geometry and attributes from this row
+    std::vector<attribute_descriptor>::const_iterator itr = desc_.get_descriptors().begin();
+    std::vector<attribute_descriptor>::const_iterator end = desc_.get_descriptors().end();
+    SQLUSMALLINT ColumnNum=1;
+    while (itr != end) {
         SQLCHAR sval[2048];
         long ival;
         double dval;
         SQLCHAR BinaryPtr[2048];    // TODO: handle larger
         SQLLEN BinaryLenOrInd;
         SQLLEN LenOrInd;
-        switch (DataType) {
-            case SQL_CHAR:
-            case SQL_VARCHAR:
-            case -9: // NVARCHAR
-            case SQL_DATETIME:
-            case SQL_TYPE_DATE:
-            case SQL_TYPE_TIME:
-            case SQL_TYPE_TIMESTAMP:
+        switch (itr->get_type()) {
+            case mapnik::sqlserver::String:
                 retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_CHAR, sval, sizeof(sval), &LenOrInd);
                 if (!SQL_SUCCEEDED(retcode)) {
                     throw sqlserver_datasource_exception("could not get data", SQL_HANDLE_STMT, hstmt_);
                 }
-                feature->put((char*)ColumnName, (UnicodeString)tr_->transcode((char*)sval));
+                feature->put(itr->get_name(), (UnicodeString)tr_->transcode((char*)sval));
                 break;
                 
-            case SQL_INTEGER:
-            case SQL_SMALLINT:
+            case mapnik::sqlserver::Integer:
                 retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_SLONG, &ival, sizeof(ival), &LenOrInd);
                 if (!SQL_SUCCEEDED(retcode)) {
                     throw sqlserver_datasource_exception("could not get data", SQL_HANDLE_STMT, hstmt_);
                 }
-                feature->put((char*)ColumnName, static_cast<mapnik::value_integer>(ival));
+                feature->put(itr->get_name(), static_cast<mapnik::value_integer>(ival));
                 break;
                 
-            case SQL_NUMERIC:
-            case SQL_DECIMAL:
-            case SQL_FLOAT:
-            case SQL_REAL:
-            case SQL_DOUBLE:
+            case mapnik::sqlserver::Double:
                 retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_DOUBLE, &dval, sizeof(dval), &LenOrInd);
                 if (!SQL_SUCCEEDED(retcode)) {
                     throw sqlserver_datasource_exception("could not get data", SQL_HANDLE_STMT, hstmt_);
                 }
-                feature->put((char*)ColumnName, dval);
+                feature->put(itr->get_name(), dval);
                 break;
     
-            case SQL_SS_UDT: {
-                // make sure this udt is a spatial data type
+            case mapnik::sqlserver::Geometry:
+            case mapnik::sqlserver::Geography: {
                 retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_BINARY, BinaryPtr, sizeof(BinaryPtr), &BinaryLenOrInd);
                 if (!SQL_SUCCEEDED(retcode)) {
-                    throw sqlserver_datasource_exception("could not get data size", SQL_HANDLE_STMT, hstmt_);
+                    throw sqlserver_datasource_exception("could not get data", SQL_HANDLE_STMT, hstmt_);
                 }
     
-                sqlserver_geometry_parser geometry_parser(column_type_);
+                sqlserver_geometry_parser geometry_parser((itr->get_type() == mapnik::sqlserver::Geometry ? Geometry : Geography));
                 mapnik::geometry_container *geom = geometry_parser.parse(BinaryPtr, BinaryLenOrInd);
                 for (size_t j=0; j<geom->size(); j++) {
                     feature->add_geometry(&geom->at(j));
@@ -165,9 +144,11 @@ feature_ptr sqlserver_featureset::next()
             }
 
             default:
-                MAPNIK_LOG_WARN(sqlserver) << "sqlserver_datasource: unknown/unsupported datatype in column: " << ColumnName << " (" << DataType << ")";
+                MAPNIK_LOG_WARN(sqlserver) << "sqlserver_datasource: unknown/unsupported datatype in column: " << itr->get_name() << " (" << itr->get_type() << ")";
                 break;
         }
+        ++ColumnNum;
+        ++itr;
     }
     ++feature_id_;
     

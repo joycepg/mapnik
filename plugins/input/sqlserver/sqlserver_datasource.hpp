@@ -30,12 +30,24 @@
 // sql server (via odbc)
 #include "sql.h"
 
-enum spatial_data_type {
-    Geometry,
-    Geography
-};
+// extended from mapnik/attribute_descriptor.hpp (added 8,9)
+namespace mapnik {
+    namespace sqlserver {
+        enum eAttributeTypeEx {
+            Integer=1,
+            Float=2,
+            Double=3,
+            String=4,
+            Boolean=5,
+            Geometry=6,
+            Object=7,
+            Geography=8,
+            Unknown=9
+        };
+    }
+}
 
-
+// SQL Server datasource for Mapnik
 class sqlserver_datasource : public mapnik::datasource
 {
 public:
@@ -55,7 +67,7 @@ private:
     std::string table_;
     std::string fields_;
     std::string geometry_field_;
-    spatial_data_type geometry_type_;
+    bool is_geometry_; // true=geometry, false=geography
 
     mutable bool extent_initialized_;
     mutable mapnik::box2d<double> extent_;
@@ -69,6 +81,9 @@ private:
     mapnik::featureset_ptr features_in_box(mapnik::box2d<double> const& box) const;
 };
 
+// if anything goes wrong in the sqlserver_datasource class, one of these
+// exceptions will be thrown. usually the message will include details from
+// the SQL Server error
 class sqlserver_datasource_exception : public mapnik::datasource_exception
 {
 public:
@@ -76,6 +91,8 @@ public:
     sqlserver_datasource_exception(std::string const& message, SQLSMALLINT HandleType, SQLHANDLE Handle);
     
     virtual ~sqlserver_datasource_exception() throw();
+    
+private:
     static std::string sql_diagnostics(SQLSMALLINT HandleType, SQLHANDLE Handle);
 };
 
