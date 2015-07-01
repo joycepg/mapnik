@@ -383,7 +383,7 @@ box2d<double> sqlserver_datasource::envelope() const
         SQLSMALLINT BufferLength = 1024;
         SQLSMALLINT TextLengthPtr;
         get_diag_rec = SQLGetDiagRec(SQL_HANDLE_STMT, hstmt, rec_number, sql_state, &NativeErrorPtr, MessageText, BufferLength, &TextLengthPtr);
-        if (SQL_SUCCEEDED(get_diag_rec))
+        if (SQL_SUCCEEDED(get_diag_rec) || SQL_SUCCESS_WITH_INFO == get_diag_rec)
         {
             char exception_buffer[2048];
             sprintf(exception_buffer, "BBox2d: could not get data. Sql_state: %s", (char*) sql_state);
