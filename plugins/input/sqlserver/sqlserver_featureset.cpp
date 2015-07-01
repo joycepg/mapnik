@@ -78,6 +78,10 @@ sqlserver_featureset::~sqlserver_featureset() {
 feature_ptr sqlserver_featureset::next()
 {
     SQLRETURN retcode;
+
+    sqlserver_geometry_parser_exception parser_error;
+    bool got_parser_error = false;
+    SQLLEN nLen;
     
     // fetch next result
     retcode = SQLFetch(hstmt_);
@@ -136,9 +140,16 @@ feature_ptr sqlserver_featureset::next()
                 }
     
                 sqlserver_geometry_parser geometry_parser((itr->get_type() == mapnik::sqlserver::Geometry ? Geometry : Geography));
-                mapnik::geometry_container *geom = geometry_parser.parse(BinaryPtr, BinaryLenOrInd);
-                for (size_t j=0; j<geom->size(); j++) {
-                    feature->add_geometry(&geom->at(j));
+                try {
+                    mapnik::geometry_container *geom = geometry_parser.parse(BinaryPtr, BinaryLenOrInd);
+                    for (size_t j=0; j<geom->size(); j++) {
+                        feature->add_geometry(&geom->at(j));
+                    }
+                } catch (sqlserver_geometry_parser_exception e) {
+                    got_parser_error = true;
+                    nLen = BinaryLenOrInd;
+                    parser_error = e;
+                    continue;
                 }
                 break;
             }
@@ -151,6 +162,14 @@ feature_ptr sqlserver_featureset::next()
         ++itr;
     }
     ++feature_id_;
+
+    if (got_parser_error) {
+        #ifdef MAPNIK_LOG
+            // We need to log what the length is and probably pszInput
+            MAPNIK_LOG_ERROR(sqlserver) << "geom length: " << nLen << ", id: " << feature->get("id");
+        #endif
+        throw parser_error;
+    }
     
     return feature;
 }

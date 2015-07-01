@@ -42,14 +42,14 @@
 
 #include <mapnik/datasource.hpp>
 
-class sqlserver_geometry_parser_exception : public sqlserver_datasource_exception
-{
-public:
-    sqlserver_geometry_parser_exception(std::string const& message)
-    : sqlserver_datasource_exception("Geometry Parser: "+message) {}
-    
-    virtual ~sqlserver_geometry_parser_exception() throw() {}
-};
+//class sqlserver_geometry_parser_exception : public sqlserver_datasource_exception
+//{
+//public:
+//    sqlserver_geometry_parser_exception(std::string const& message)
+//    : sqlserver_datasource_exception("Geometry Parser: "+message) {}
+//
+//    virtual ~sqlserver_geometry_parser_exception() throw() {}
+//};
 
 
 /*   SqlGeometry serialization format
@@ -361,10 +361,6 @@ mapnik::geometry_container* sqlserver_geometry_parser::ReadGeometryCollection(in
 mapnik::geometry_container* sqlserver_geometry_parser::parse(unsigned char* pszInput, int nLen)
 {
     if (nLen < 10) {
-        #ifdef MAPNIK_LOG
-          // We need to log what the length is and probably pszInput
-          // MAPNIK_LOG_ERROR(sqlserver) << "Log the variable " << nLen << ", visible at ERROR severity level";
-        #endif
         throw sqlserver_geometry_parser_exception("not enough data");
     }
     

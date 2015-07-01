@@ -1,5 +1,6 @@
 // mapnik
 #include <mapnik/geometry.hpp>
+#include "sqlserver_datasource.hpp"
 
 enum spatial_data_type {
     Geometry,
@@ -42,4 +43,15 @@ public:
     int get_srs_id() { return nSRSId; };
 };
 
+class sqlserver_geometry_parser_exception : public sqlserver_datasource_exception
+{
+public:
+    sqlserver_geometry_parser_exception(std::string const& message)
+    : sqlserver_datasource_exception("Geometry Parser: "+message) {}
+
+    sqlserver_geometry_parser_exception()
+    : sqlserver_datasource_exception("Geometry Parser: ") {}
+
+    virtual ~sqlserver_geometry_parser_exception() throw() {}
+};
 
