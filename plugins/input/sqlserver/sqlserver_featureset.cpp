@@ -143,16 +143,16 @@ feature_ptr sqlserver_featureset::next()
                     SQLCHAR MessageText[1024];
                     SQLSMALLINT BufferLength = 1024;
                     SQLSMALLINT TextLengthPtr;
-                    get_diag_rec = SQLGetDiagRec(SQL_HANDLE_STMT, hstmt, rec_number, sql_state, &NativeErrorPtr, MessageText, BufferLength, &TextLengthPtr);
+                    get_diag_rec = SQLGetDiagRec(SQL_HANDLE_STMT, hstmt_, rec_number, sql_state, &NativeErrorPtr, MessageText, BufferLength, &TextLengthPtr);
                     if (SQL_SUCCEEDED(get_diag_rec))
                     {
                         char exception_buffer[2048];
                         sprintf(exception_buffer, "get next feature: could not get geom data. Sql_state: %s", (char*) sql_state);
-                        throw sqlserver_datasource_exception(exception_buffer, SQL_HANDLE_STMT, hstmt);
+                        throw sqlserver_datasource_exception(exception_buffer, SQL_HANDLE_STMT, hstmt_);
                     }
                     else
                     {
-                        throw sqlserver_datasource_exception("get next feature: could not get geom data", SQL_HANDLE_STMT, hstmt);
+                        throw sqlserver_datasource_exception("get next feature: could not get geom data", SQL_HANDLE_STMT, hstmt_);
                     }
                     // throw sqlserver_datasource_exception("could not get data", SQL_HANDLE_STMT, hstmt_);
                 }
