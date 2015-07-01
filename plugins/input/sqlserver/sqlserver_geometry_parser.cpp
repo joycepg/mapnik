@@ -361,6 +361,10 @@ mapnik::geometry_container* sqlserver_geometry_parser::ReadGeometryCollection(in
 mapnik::geometry_container* sqlserver_geometry_parser::parse(unsigned char* pszInput, int nLen)
 {
     if (nLen < 10) {
+        #ifdef MAPNIK_LOG
+          // We need to log what the length is and probably pszInput
+          // MAPNIK_LOG_ERROR(sqlserver) << "Log the variable " << nLen << ", visible at ERROR severity level";
+        #endif
         throw sqlserver_geometry_parser_exception("not enough data");
     }
     
