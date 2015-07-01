@@ -375,7 +375,24 @@ box2d<double> sqlserver_datasource::envelope() const
     SQLLEN BinaryLenOrInd;
     retcode = SQLGetData(hstmt, ColumnNum, SQL_C_BINARY, BinaryPtr, sizeof(BinaryPtr), &BinaryLenOrInd);
     if (!SQL_SUCCEEDED(retcode)) {
-        throw sqlserver_datasource_exception("could not get data", SQL_HANDLE_STMT, hstmt);
+        SQLRETURN get_diag_rec;
+        int rec_number = 1;
+        SQLCHAR sql_state[32];
+        SQLINTEGER NativeErrorPtr;
+        SQLCHAR MessageText[1024];
+        SQLSMALLINT BufferLength = 1024;
+        SQLSMALLINT TextLengthPtr;
+        get_diag_rec = SQLGetDiagRec(SQL_HANDLE_STMT, hstmt, rec_number, sql_state, &NativeErrorPtr, MessageText, BufferLength, &TextLengthPtr);
+        if (SQL_SUCCEEDED(get_diag_rec))
+        {
+            char exception_buffer[2048];
+            sprintf(exception_buffer, "BBox2d: could not get data. Sql_state: %s", (char*) sql_state);
+            throw sqlserver_datasource_exception(exception_buffer, SQL_HANDLE_STMT, hstmt);
+        }
+        else
+        {
+            throw sqlserver_datasource_exception("BBox2d: could not get data", SQL_HANDLE_STMT, hstmt);
+        }
     }
     //MAPNIK_LOG_DEBUG(sqlserver) << "sqlserver_datasource: envelope returned " << BinaryLenOrInd << " bytes";
     
