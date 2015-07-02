@@ -78,10 +78,6 @@ sqlserver_featureset::~sqlserver_featureset() {
 feature_ptr sqlserver_featureset::next()
 {
     SQLRETURN retcode;
-
-    sqlserver_geometry_parser_exception parser_error;
-    bool got_parser_error = false;
-    SQLLEN nLen;
     
     // fetch next result
     retcode = SQLFetch(hstmt_);
@@ -111,7 +107,7 @@ feature_ptr sqlserver_featureset::next()
             case mapnik::sqlserver::String:
                 retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_CHAR, sval, sizeof(sval), &LenOrInd);
                 if (!SQL_SUCCEEDED(retcode)) {
-                    throw sqlserver_datasource_exception("could not get string data", SQL_HANDLE_STMT, hstmt_);
+                    throw sqlserver_datasource_exception("could not get data", SQL_HANDLE_STMT, hstmt_);
                 }
                 feature->put(itr->get_name(), (UnicodeString)tr_->transcode((char*)sval));
                 break;
@@ -119,7 +115,7 @@ feature_ptr sqlserver_featureset::next()
             case mapnik::sqlserver::Integer:
                 retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_SLONG, &ival, sizeof(ival), &LenOrInd);
                 if (!SQL_SUCCEEDED(retcode)) {
-                    throw sqlserver_datasource_exception("could not get int data", SQL_HANDLE_STMT, hstmt_);
+                    throw sqlserver_datasource_exception("could not get data", SQL_HANDLE_STMT, hstmt_);
                 }
                 feature->put(itr->get_name(), static_cast<mapnik::value_integer>(ival));
                 break;
@@ -127,7 +123,7 @@ feature_ptr sqlserver_featureset::next()
             case mapnik::sqlserver::Double:
                 retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_DOUBLE, &dval, sizeof(dval), &LenOrInd);
                 if (!SQL_SUCCEEDED(retcode)) {
-                    throw sqlserver_datasource_exception("could not get double data", SQL_HANDLE_STMT, hstmt_);
+                    throw sqlserver_datasource_exception("could not get data", SQL_HANDLE_STMT, hstmt_);
                 }
                 feature->put(itr->get_name(), dval);
                 break;
@@ -136,38 +132,13 @@ feature_ptr sqlserver_featureset::next()
             case mapnik::sqlserver::Geography: {
                 retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_BINARY, BinaryPtr, sizeof(BinaryPtr), &BinaryLenOrInd);
                 if (!SQL_SUCCEEDED(retcode)) {
-                    SQLRETURN get_diag_rec;
-                    int rec_number = 1;
-                    SQLCHAR sql_state[32];
-                    SQLINTEGER NativeErrorPtr;
-                    SQLCHAR MessageText[2048];
-                    SQLSMALLINT BufferLength = 2048;
-                    SQLSMALLINT TextLengthPtr;
-                    get_diag_rec = SQLGetDiagRec(SQL_HANDLE_STMT, hstmt_, rec_number, sql_state, &NativeErrorPtr, MessageText, BufferLength, &TextLengthPtr);
-                    if (SQL_SUCCEEDED(get_diag_rec) || SQL_SUCCESS_WITH_INFO == get_diag_rec)
-                    {
-                        char exception_buffer[2048];
-                        sprintf(exception_buffer, "get next feature: could not get geom data. Sql_state: %s", (char*) sql_state);
-                        throw sqlserver_datasource_exception(exception_buffer, SQL_HANDLE_STMT, hstmt_);
-                    }
-                    else
-                    {
-                        throw sqlserver_datasource_exception("get next feature: could not get geom data", SQL_HANDLE_STMT, hstmt_);
-                    }
-                    // throw sqlserver_datasource_exception("could not get data", SQL_HANDLE_STMT, hstmt_);
+                    throw sqlserver_datasource_exception("could not get data", SQL_HANDLE_STMT, hstmt_);
                 }
     
                 sqlserver_geometry_parser geometry_parser((itr->get_type() == mapnik::sqlserver::Geometry ? Geometry : Geography));
-                try {
-                    mapnik::geometry_container *geom = geometry_parser.parse(BinaryPtr, BinaryLenOrInd);
-                    for (size_t j=0; j<geom->size(); j++) {
-                        feature->add_geometry(&geom->at(j));
-                    }
-                } catch (sqlserver_geometry_parser_exception e) {
-                    got_parser_error = true;
-                    nLen = BinaryLenOrInd;
-                    parser_error = e;
-                    continue;
+                mapnik::geometry_container *geom = geometry_parser.parse(BinaryPtr, BinaryLenOrInd);
+                for (size_t j=0; j<geom->size(); j++) {
+                    feature->add_geometry(&geom->at(j));
                 }
                 break;
             }
@@ -180,14 +151,6 @@ feature_ptr sqlserver_featureset::next()
         ++itr;
     }
     ++feature_id_;
-
-    if (got_parser_error) {
-        #ifdef MAPNIK_LOG
-            // We need to log what the length is and probably pszInput
-            MAPNIK_LOG_ERROR(sqlserver) << "geom length: " << nLen << ", id: " << feature->get("id");
-        #endif
-        throw parser_error;
-    }
     
     return feature;
 }
