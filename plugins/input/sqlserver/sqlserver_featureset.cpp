@@ -108,7 +108,7 @@ feature_ptr sqlserver_featureset::next()
             case mapnik::sqlserver::String:
                 retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_CHAR, sval, sizeof(sval), &LenOrInd);
                 if (!SQL_SUCCEEDED(retcode)) {
-                    throw sqlserver_datasource_exception("could not get data", SQL_HANDLE_STMT, hstmt_);
+                    throw sqlserver_datasource_exception("could not get string data", SQL_HANDLE_STMT, hstmt_);
                 }
                 feature->put(itr->get_name(), (UnicodeString)tr_->transcode((char*)sval));
                 break;
@@ -116,7 +116,7 @@ feature_ptr sqlserver_featureset::next()
             case mapnik::sqlserver::Integer:
                 retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_SLONG, &ival, sizeof(ival), &LenOrInd);
                 if (!SQL_SUCCEEDED(retcode)) {
-                    throw sqlserver_datasource_exception("could not get data", SQL_HANDLE_STMT, hstmt_);
+                    throw sqlserver_datasource_exception("could not get int data", SQL_HANDLE_STMT, hstmt_);
                 }
                 feature->put(itr->get_name(), static_cast<mapnik::value_integer>(ival));
                 break;
@@ -124,7 +124,7 @@ feature_ptr sqlserver_featureset::next()
             case mapnik::sqlserver::Double:
                 retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_DOUBLE, &dval, sizeof(dval), &LenOrInd);
                 if (!SQL_SUCCEEDED(retcode)) {
-                    throw sqlserver_datasource_exception("could not get data", SQL_HANDLE_STMT, hstmt_);
+                    throw sqlserver_datasource_exception("could not get double data", SQL_HANDLE_STMT, hstmt_);
                 }
                 feature->put(itr->get_name(), dval);
                 break;
