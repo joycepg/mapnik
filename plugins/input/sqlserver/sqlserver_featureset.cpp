@@ -135,6 +135,7 @@ feature_ptr sqlserver_featureset::next()
                 if (SQLGetData(hstmt_, ColumnNum, SQL_C_BINARY, BinaryPtr, 0, &BinaryLenOrInd) == SQL_SUCCESS_WITH_INFO)
                 {
                     BinaryPtr = new SQLCHAR[BinaryLenOrInd];    // should this be SQL_C_BINARY??
+                    MAPNIK_LOG_ERROR(sqlserver) << "Allocated required buffer size: " << BinaryLenOrInd;
                     retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_BINARY, BinaryPtr, sizeof(BinaryPtr), &BinaryLenOrInd);
                     if (!SQL_SUCCEEDED(retcode)) {
                         throw sqlserver_datasource_exception("could not get geometry data into buffer", SQL_HANDLE_STMT, hstmt_);
