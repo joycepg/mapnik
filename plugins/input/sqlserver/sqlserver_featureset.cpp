@@ -100,7 +100,8 @@ feature_ptr sqlserver_featureset::next()
         SQLCHAR sval[2048];
         long ival;
         double dval;
-        SQLCHAR BinaryPtr[2048];    // TODO: handle larger
+        //SQLCHAR BinaryPtr[2048];    // TODO: handle larger
+        SQLCHAR* BinaryPtr = NULL;    // Allocate dynamically
         SQLLEN BinaryLenOrInd;
         SQLLEN LenOrInd;
         switch (itr->get_type()) {
@@ -130,15 +131,38 @@ feature_ptr sqlserver_featureset::next()
     
             case mapnik::sqlserver::Geometry:
             case mapnik::sqlserver::Geography: {
-                retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_BINARY, BinaryPtr, sizeof(BinaryPtr), &BinaryLenOrInd);
-                if (!SQL_SUCCEEDED(retcode)) {
-                    throw sqlserver_datasource_exception("could not get data", SQL_HANDLE_STMT, hstmt_);
+                // Call SQLGetData to determine the amount of data that's waiting.
+                if (SQLGetData(hstmt_, ColumnNum, SQL_C_BINARY, BinaryPtr, 0, &BinaryLenOrInd) == SQL_SUCCESS_WITH_INFO)
+                {
+                    BinaryPtr = new SQLCHAR[BinaryLenOrInd];    // should this be SQL_C_BINARY??
+                    retcode = SQLGetData(hstmt_, ColumnNum, SQL_C_BINARY, BinaryPtr, sizeof(BinaryPtr), &BinaryLenOrInd);
+                    if (!SQL_SUCCEEDED(retcode)) {
+                        throw sqlserver_datasource_exception("could not get geometry data into buffer", SQL_HANDLE_STMT, hstmt_);
+                    }
+
+                    try
+                    {
+                        sqlserver_geometry_parser geometry_parser((itr->get_type() == mapnik::sqlserver::Geometry ? Geometry : Geography));
+                        mapnik::geometry_container *geom = geometry_parser.parse(BinaryPtr, BinaryLenOrInd);
+                        for (size_t j=0; j<geom->size(); j++) {
+                            feature->add_geometry(&geom->at(j));
+                        }
+                    }
+                    catch (mapnik::datasource_exception e)
+                    {
+                        // Cleanup and throw the caught exception
+                        delete [] BinaryPtr;
+                        BinaryPtr = NULL;
+                        throw;
+                    }
+
+                    // Cleanup
+                    delete [] BinaryPtr;
+                    BinaryPtr = NULL;
                 }
-    
-                sqlserver_geometry_parser geometry_parser((itr->get_type() == mapnik::sqlserver::Geometry ? Geometry : Geography));
-                mapnik::geometry_container *geom = geometry_parser.parse(BinaryPtr, BinaryLenOrInd);
-                for (size_t j=0; j<geom->size(); j++) {
-                    feature->add_geometry(&geom->at(j));
+                else
+                {
+                    throw sqlserver_datasource_exception("could not get geometry data - failed to get buffer length", SQL_HANDLE_STMT, hstmt_);
                 }
                 break;
             }
