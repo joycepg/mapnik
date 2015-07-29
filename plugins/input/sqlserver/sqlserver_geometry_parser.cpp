@@ -416,7 +416,7 @@ mapnik::geometry_container* sqlserver_geometry_parser::parse(unsigned char* pszI
 
         if (nLen < 6 + 2 * nPointSize)
         {
-            throw sqlserver_geometry_parser_exception("not enough data, chProps & SP_ISSINGLELINESEGMENT");
+            throw sqlserver_geometry_parser_exception("not enough data, nLen < 6 + 2 * nPointSize");
         }
 
         geom = new mapnik::geometry_container();
