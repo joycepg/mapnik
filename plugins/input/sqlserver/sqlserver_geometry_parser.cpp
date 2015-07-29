@@ -361,7 +361,7 @@ mapnik::geometry_container* sqlserver_geometry_parser::ReadGeometryCollection(in
 mapnik::geometry_container* sqlserver_geometry_parser::parse(unsigned char* pszInput, int nLen)
 {
     if (nLen < 10) {
-        throw sqlserver_geometry_parser_exception("not enough data");
+        throw sqlserver_geometry_parser_exception("not enough data, nLen < 10");
     }
     
     pszData = pszInput;
@@ -371,7 +371,7 @@ mapnik::geometry_container* sqlserver_geometry_parser::parse(unsigned char* pszI
     
     if ( ReadByte(4) != 1 )
     {
-        throw sqlserver_geometry_parser_exception("corrupt data");
+        throw sqlserver_geometry_parser_exception("corrupt data, ReadByte(4) != 1");
     }
 
     chProps = ReadByte(5);
@@ -392,7 +392,7 @@ mapnik::geometry_container* sqlserver_geometry_parser::parse(unsigned char* pszI
 
         if (nLen < 6 + nPointSize)
         {
-            throw sqlserver_geometry_parser_exception("not enough data");
+            throw sqlserver_geometry_parser_exception("not enough data, nLen < 6 + nPointSize");
         }
         
         geom = new mapnik::geometry_container();
@@ -416,7 +416,7 @@ mapnik::geometry_container* sqlserver_geometry_parser::parse(unsigned char* pszI
 
         if (nLen < 6 + 2 * nPointSize)
         {
-            throw sqlserver_geometry_parser_exception("not enough data");
+            throw sqlserver_geometry_parser_exception("not enough data, chProps & SP_ISSINGLELINESEGMENT");
         }
 
         geom = new mapnik::geometry_container();
@@ -442,7 +442,7 @@ mapnik::geometry_container* sqlserver_geometry_parser::parse(unsigned char* pszI
 
         if ( nNumPoints <= 0 )
         {
-            throw sqlserver_geometry_parser_exception("negative number of points");
+            throw sqlserver_geometry_parser_exception("negative number of points, nNumPoints <= 0");
         }
 
         // position of the point array
@@ -453,14 +453,14 @@ mapnik::geometry_container* sqlserver_geometry_parser::parse(unsigned char* pszI
         
         if (nLen < nFigurePos)
         {
-            throw sqlserver_geometry_parser_exception("not enough data");
+            throw sqlserver_geometry_parser_exception("not enough data, nLen < nFigurePos");
         }
 
         nNumFigures = ReadInt32(nFigurePos - 4);
 
         if ( nNumFigures <= 0 )
         {
-            throw sqlserver_geometry_parser_exception("negative number of figures");
+            throw sqlserver_geometry_parser_exception("negative number of figures, nNumFigures <= 0");
         }
         
         // position of the shapes
@@ -468,25 +468,25 @@ mapnik::geometry_container* sqlserver_geometry_parser::parse(unsigned char* pszI
 
         if (nLen < nShapePos)
         {
-            throw sqlserver_geometry_parser_exception("not enough data");
+            throw sqlserver_geometry_parser_exception("not enough data, nLen < nShapePos");
         }
 
         nNumShapes = ReadInt32(nShapePos - 4);
 
         if (nLen < nShapePos + 9 * nNumShapes)
         {
-            throw sqlserver_geometry_parser_exception("not enough data");
+            throw sqlserver_geometry_parser_exception("not enough data, nLen < nShapePos + 9 * nNumShapes");
         }
 
         if ( nNumShapes <= 0 )
         {
-            throw sqlserver_geometry_parser_exception("negative number of shapes");
+            throw sqlserver_geometry_parser_exception("negative number of shapes, nNumShapes <= 0");
         }
 
         // pick up the root shape
         if ( ParentOffset(0) != 0xFFFFFFFF)
         {
-            throw sqlserver_geometry_parser_exception("corrupt data");
+            throw sqlserver_geometry_parser_exception("corrupt data, ParentOffset(0) != 0xFFFFFFFF");
         }
 
         // determine the shape type
